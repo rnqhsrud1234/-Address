@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-   <meta name="robots" content="noindex, nofollow, noarchive">
-   <meta name="googlebot" content="noindex, nofollow">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="googlebot" content="noindex, nofollow">
 <title>쿠쿠 센터 주소록</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -166,7 +166,7 @@ td.upd.fresh{color:#2e7d32;font-weight:bold}
 <div class="modal-box">
 <h2>관리자 로그인</h2>
 <div class="hint" id="loginhint"></div>
-<div class="field" id="emailfield"><label>이메일</label><input id="l_email" type="email" autocomplete="username"></div>
+<div class="field" id="emailfield"><label>아이디</label><input id="l_email" type="text" placeholder="admin" autocomplete="username" autocapitalize="off" spellcheck="false"></div>
 <div class="field"><label>비밀번호</label><input id="l_pw" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
 <div class="modal-acts">
 <button class="btn btn-cancel" onclick="closeLogin()">취소</button>
@@ -183,6 +183,12 @@ td.upd.fresh{color:#2e7d32;font-weight:bold}
    ============================================================ */
 const SUPABASE_URL      = "https://efxcylnuncyvlassnicg.supabase.co";   // 예: https://abcdefgh.supabase.co
 const SUPABASE_ANON_KEY = "sb_publishable_o78IiuUyDteuIe1657LktA_ZnrYd_Kx";   // Project Settings > API > anon public key
+
+/* 관리자 아이디 뒤에 자동으로 붙는 도메인.
+   Supabase Auth는 이메일 형식을 요구하므로, 화면에서는 "admin" 만 입력받고
+   내부적으로 "admin@cuckoo.local" 로 변환해 로그인합니다.
+   Supabase > Authentication > Users 에 이 형태로 계정을 만들어 두세요. */
+const ADMIN_ID_DOMAIN = "cuckoo.local";
 
 /* 로컬 모드(=Supabase 미설정) 전용 임시 비밀번호.
    소스에 그대로 노출되므로 테스트 용도로만 쓰세요. */
@@ -232,7 +238,7 @@ function nowISO(){return new Date().toISOString();}
 /* ---------- 데이터 로드 ---------- */
 async function loadData(){
   if(CLOUD){
-    const {data,error}=await sb.from('addressbook').select('*').order('code',{ascending:true});
+    const {data,error}=await sb.from('contacts').select('*').order('code',{ascending:true});
     if(error){
       toast('데이터를 불러오지 못했습니다 — '+error.message,true);
       DATA=[]; return;
@@ -264,7 +270,7 @@ function applyRole(){
 function openLogin(){
   document.getElementById('emailfield').style.display=CLOUD?'':'none';
   document.getElementById('loginhint').textContent = CLOUD
-    ? 'Supabase에 등록된 관리자 계정으로 로그인합니다.'
+    ? '관리자 아이디와 비밀번호를 입력하세요.'
     : '로컬 모드입니다. 이 로그인은 화면 잠금일 뿐 실제 보안 기능이 아닙니다.';
   document.getElementById('l_pw').value='';
   document.getElementById('loginmodal').classList.add('show');
@@ -288,13 +294,15 @@ async function doLogin(){
   const pw=document.getElementById('l_pw').value;
   const btn=document.getElementById('loginbtn');
   if(CLOUD){
-    const em=document.getElementById('l_email').value.trim();
-    if(!em||!pw){toast('이메일과 비밀번호를 입력하세요',true);return;}
+    const raw=document.getElementById('l_email').value.trim();
+    if(!raw||!pw){toast('아이디와 비밀번호를 입력하세요',true);return;}
+    // "admin" -> "admin@cuckoo.local" (이미 @가 있으면 그대로 사용)
+    const em = raw.includes('@') ? raw : raw + '@' + ADMIN_ID_DOMAIN;
     btn.disabled=true; btn.textContent='확인 중…';
-    const {error}=await sb.auth.signInWithPassword({email:em,password:pw});
+    const {data,error}=await sb.auth.signInWithPassword({email:em,password:pw});
     btn.disabled=false; btn.textContent='로그인';
-    if(error){toast('로그인 실패 — 이메일 또는 비밀번호를 확인하세요',true);return;}
-    const {data:{session}}=await sb.auth.getSession();
+    if(error){toast('로그인 실패 — 아이디 또는 비밀번호를 확인하세요',true);return;}
+    const session=(data && data.session) || (await sb.auth.getSession()).data.session;
     if(!await checkAdmin(session)){
       await sb.auth.signOut();
       toast('이 계정에는 주소록 수정 권한이 없습니다',true);
@@ -435,7 +443,7 @@ async function saveModal(){
   btn.disabled=true; btn.textContent='저장 중…';
 
   if(CLOUD){
-    const {error}=await sb.from('addressbook').upsert(obj,{onConflict:'code'});
+    const {error}=await sb.from('contacts').upsert(obj,{onConflict:'code'});
     btn.disabled=false; btn.textContent='저장';
     if(error){toast('저장하지 못했습니다 — '+error.message,true);return;}
     await loadData();
@@ -458,7 +466,7 @@ async function delRow(code){
   const r=DATA.find(x=>x.code===code); if(!r)return;
   if(!confirm('['+r.name+'] 항목을 삭제할까요?'))return;
   if(CLOUD){
-    const {error}=await sb.from('addressbook').delete().eq('code',code);
+    const {error}=await sb.from('contacts').delete().eq('code',code);
     if(error){toast('삭제하지 못했습니다 — '+error.message,true);return;}
     await loadData();
   }else{
@@ -509,10 +517,10 @@ async function importData(input){
 
     if(CLOUD){
       if(!merge){
-        const {error:de}=await sb.from('addressbook').delete().neq('code','__never_match__');
+        const {error:de}=await sb.from('contacts').delete().neq('code','__never_match__');
         if(de){toast('기존 데이터를 지우지 못했습니다 — '+de.message,true);input.value='';return;}
       }
-      const {error}=await sb.from('addressbook').upsert(parsed,{onConflict:'code'});
+      const {error}=await sb.from('contacts').upsert(parsed,{onConflict:'code'});
       if(error){toast('불러오지 못했습니다 — '+error.message,true);input.value='';return;}
       await loadData();
       sel.clear(); render();
