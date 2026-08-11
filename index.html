@@ -33,6 +33,7 @@ h1{font-size:20px;color:#404040;margin-bottom:4px;display:inline-block}
 .btn-exp{background:#6a5acd;color:#fff}.btn-exp:hover{background:#5546b8}
 .btn-imp{background:#e65100;color:#fff}.btn-imp:hover{background:#bf4400}
 .btn-out{background:#e0e0e0;color:#555}.btn-out:hover{background:#ccc}
+.btn-delsel{background:#c62828;color:#fff}.btn-delsel:hover{background:#a11d1d}
 .btn-sm{padding:6px 10px;font-size:12px}
 .btn-edit{background:#eef;color:#1565c0}
 .btn-del{background:#fee;color:#c62828}
@@ -115,6 +116,7 @@ td.upd.fresh{color:#2e7d32;font-weight:bold}
 <span class="cnt">선택 <b id="selcnt">0</b> / 표시 <b id="showcnt">0</b></span>
 <button class="btn btn-copy" onclick="copyEmails()">📋 선택 이메일 복사</button>
 <button class="btn btn-clear" onclick="clearSel()">선택해제</button>
+<button class="btn btn-delsel adminonly" onclick="delSelected()">🗑 선택 삭제</button>
 </div>
 
 <div class="tablewrap">
@@ -133,6 +135,7 @@ td.upd.fresh{color:#2e7d32;font-weight:bold}
 <div class="selbar" id="selbar">
 <div class="info">선택된 이메일 <b id="selbarcnt">0</b>개 — 아래 박스에서 복사하거나 버튼을 누르세요</div>
 <button class="btn btn-copy" onclick="copyEmails()">📋 전체 복사</button>
+<button class="btn btn-delsel adminonly" onclick="delSelected()">🗑 선택 삭제</button>
 <textarea class="emailout" id="emailout" readonly onclick="this.select()"></textarea>
 </div>
 
@@ -473,6 +476,33 @@ async function delRow(code){
     DATA=DATA.filter(x=>x.code!==code); saveLocal();
   }
   sel.delete(code); render(); toast('삭제했습니다');
+}
+
+async function delSelected(){
+  if(!isAdmin)return;
+  const codes=DATA.filter(r=>sel.has(r.code)).map(r=>r.code);
+  if(!codes.length){toast('선택된 항목이 없습니다',true);return;}
+
+  // 탭을 넘나들며 선택했을 수 있으므로 구분별 건수를 함께 보여줍니다
+  const rows=DATA.filter(r=>sel.has(r.code));
+  const byCat={};
+  rows.forEach(r=>{const c=catOf(r.gubun);byCat[c]=(byCat[c]||0)+1;});
+  const catTxt=Object.keys(byCat).map(k=>k+' '+byCat[k]+'건').join(' / ');
+  const names=rows.slice(0,7).map(r=>' · '+r.name).join('\n');
+  const more=rows.length>7?'\n · … 외 '+(rows.length-7)+'건':'';
+
+  if(!confirm('선택한 '+codes.length+'건을 삭제합니다.\n('+catTxt+')\n\n'+names+more+'\n\n※ 되돌릴 수 없습니다. 진행할까요?')) return;
+
+  if(CLOUD){
+    const {error}=await sb.from('addressbook').delete().in('code',codes);
+    if(error){toast('삭제하지 못했습니다 — '+error.message,true);return;}
+    await loadData();
+  }else{
+    DATA=DATA.filter(r=>!sel.has(r.code));
+    saveLocal();
+  }
+  sel.clear(); render();
+  toast(codes.length+'건을 삭제했습니다');
 }
 
 /* ---------- 엑셀 내보내기 / 불러오기 ---------- */
