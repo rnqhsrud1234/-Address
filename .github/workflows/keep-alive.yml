@@ -1,0 +1,32 @@
+name: Supabase 슬립 방지
+
+# 무료 플랜은 7일간 DB 활동이 없으면 프로젝트가 일시정지됩니다.
+# 주 2회 가볍게 조회해서 활동 기록을 남깁니다.
+# SUPABASE_ANON_KEY 에는 publishable key (sb_publishable_...) 를 넣으세요.
+# secret key 는 절대 넣지 마세요.
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'   # 매주 월요일 09:00 KST (UTC 00:00)
+    - cron: '0 0 * * 4'   # 매주 목요일 09:00 KST
+  workflow_dispatch:      # 수동 실행 버튼
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 주소록 DB 조회
+        run: |
+          code=$(curl -s -o /tmp/out.txt -w "%{http_code}" \
+            "${SUPABASE_URL}/rest/v1/addressbook?select=code&limit=1" \
+            -H "apikey: ${SUPABASE_ANON_KEY}")
+          echo "HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Supabase 응답 실패 (HTTP $code)"
+            cat /tmp/out.txt
+            exit 1
+          fi
+          echo "정상 — 프로젝트 활성 유지됨"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
