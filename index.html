@@ -41,6 +41,15 @@ h1{font-size:20px;color:#404040;margin-bottom:4px;display:inline-block}
 .tablewrap{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 table{width:100%;border-collapse:collapse;font-size:13px}
 thead th{background:#EEECE1;color:#333;font-weight:bold;padding:10px 8px;text-align:left;position:sticky;top:0;border-bottom:1px solid #BFBFBF;white-space:nowrap}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{background:#e4e1d2}
+th.sorted{background:#dedac6}
+.sar{color:#8a8577;font-size:10px;margin-left:3px}
+#filterrow th{top:37px;padding:5px 6px;background:#f7f6f0;border-bottom:1px solid #ddd}
+.fin{width:100%;min-width:60px;padding:4px 6px;border:1px solid #c9c9c9;border-radius:4px;font-size:11px;font-weight:normal;font-family:inherit;background:#fff}
+.fin:focus{outline:none;border-color:#404040}
+.btn-filter{background:#455a64;color:#fff}.btn-filter:hover{background:#35464e}
+.btn-filter.on{background:#2e7d32}
 tbody td{padding:8px;border-bottom:1px solid #eee;vertical-align:middle}
 tbody tr:hover{background:#fafaf5}
 tbody tr.sel{background:#e8f5e9}tbody tr.sel:hover{background:#dcecdd}
@@ -112,17 +121,39 @@ td.upd.fresh{color:#2e7d32;font-weight:bold}
 <input class="search" id="q" type="text" placeholder="🔍 센터명 · 대표자 · 전화번호 · 주소 · 이메일 검색" oninput="render()">
 <span class="cnt">선택 <b id="selcnt">0</b> / 표시 <b id="showcnt">0</b></span>
 <button class="btn btn-copy" onclick="copyEmails()">📋 선택 이메일 복사</button>
+<button class="btn btn-filter" id="filterbtn" onclick="toggleFilter()">⛃ 필터</button>
 <button class="btn btn-clear" onclick="clearSel()">선택해제</button>
 <button class="btn btn-delsel adminonly" onclick="delSelected()">🗑 선택 삭제</button>
 </div>
 
 <div class="tablewrap">
 <table>
-<thead><tr>
+<thead>
+<tr>
 <th class="chk"><input type="checkbox" id="allchk" onclick="toggleAll(this)" aria-label="전체 선택"></th>
-<th class="col-code">코드</th><th>센터명</th><th>대표자</th><th>전화번호</th><th>이메일</th><th class="col-addr">주소</th><th>구분</th>
-<th class="col-upd">수정일</th><th class="adminonly">관리</th>
-</tr></thead>
+<th class="col-code sortable" onclick="setSort('code')">코드<span class="sar" id="sa_code"></span></th>
+<th class="sortable" onclick="setSort('name')">센터명<span class="sar" id="sa_name"></span></th>
+<th class="sortable" onclick="setSort('rep')">대표자<span class="sar" id="sa_rep"></span></th>
+<th class="sortable" onclick="setSort('tel')">전화번호<span class="sar" id="sa_tel"></span></th>
+<th class="sortable" onclick="setSort('email')">이메일<span class="sar" id="sa_email"></span></th>
+<th class="col-addr sortable" onclick="setSort('addr')">주소<span class="sar" id="sa_addr"></span></th>
+<th class="sortable" onclick="setSort('gubun')">구분<span class="sar" id="sa_gubun"></span></th>
+<th class="col-upd sortable" onclick="setSort('updated_at')">수정일<span class="sar" id="sa_updated_at"></span></th>
+<th class="adminonly">관리</th>
+</tr>
+<tr id="filterrow" style="display:none">
+<th class="chk"></th>
+<th class="col-code"><input class="fin" id="fx_code" oninput="render()" placeholder="코드"></th>
+<th><input class="fin" id="fx_name" oninput="render()" placeholder="센터명"></th>
+<th><input class="fin" id="fx_rep" oninput="render()" placeholder="대표자"></th>
+<th><input class="fin" id="fx_tel" oninput="render()" placeholder="전화번호"></th>
+<th><input class="fin" id="fx_email" oninput="render()" placeholder="이메일"></th>
+<th class="col-addr"><input class="fin" id="fx_addr" oninput="render()" placeholder="주소"></th>
+<th><select class="fin" id="fx_gubun" onchange="render()"></select></th>
+<th class="col-upd"><input class="fin" id="fx_updated_at" oninput="render()" placeholder="2026-08"></th>
+<th class="adminonly"></th>
+</tr>
+</thead>
 <tbody id="tbody"></tbody>
 </table>
 <div class="loading" id="loading">불러오는 중…</div>
@@ -201,6 +232,9 @@ const SEED = [];
 
 let DATA = [];
 let curCat = "전체";
+let sortKey = null;   // null이면 코드 오름차순(기본)
+let sortDir = 1;      // 1=오름차순, -1=내림차순
+let filterOn = false;
 let editCode = null;
 let isAdmin = false;
 let ready = false;
@@ -336,6 +370,68 @@ async function doLogout(){
 /* ---------- 렌더 ---------- */
 function setTab(c){ curCat=c; render(); }
 
+/* 헤더 클릭: 오름차순 -> 내림차순 -> 해제(기본순서) 순환 */
+const SORT_KEYS=['code','name','rep','tel','email','addr','gubun','updated_at'];
+function setSort(k){
+  if(sortKey===k){
+    if(sortDir===1) sortDir=-1;
+    else { sortKey=null; sortDir=1; }
+  }else{ sortKey=k; sortDir=1; }
+  render();
+}
+function updateSortArrows(){
+  SORT_KEYS.forEach(k=>{
+    const el=document.getElementById('sa_'+k);
+    if(el) el.textContent = (sortKey===k) ? (sortDir===1?'▲':'▼') : '';
+    const th=el?el.parentNode:null;
+    if(th) th.classList.toggle('sorted', sortKey===k);
+  });
+}
+function sortRows(list){
+  if(!sortKey) return list;
+  return list.slice().sort((a,b)=>{
+    const va=a[sortKey]||'', vb=b[sortKey]||'';
+    if(sortKey==='updated_at') return (va<vb?-1:va>vb?1:0)*sortDir;
+    // 빈 값은 항상 뒤로
+    if(!va&&vb) return 1;
+    if(va&&!vb) return -1;
+    return String(va).localeCompare(String(vb),'ko',{numeric:true,sensitivity:'base'})*sortDir;
+  });
+}
+
+function toggleFilter(){
+  filterOn=!filterOn;
+  document.getElementById('filterrow').style.display = filterOn?'':'none';
+  document.getElementById('filterbtn').classList.toggle('on',filterOn);
+  if(!filterOn) clearColFilters(true);
+  render();
+}
+function clearColFilters(skipRender){
+  SORT_KEYS.forEach(k=>{ const el=document.getElementById('fx_'+k); if(el) el.value=''; });
+  if(!skipRender) render();
+}
+function colFilters(){
+  if(!filterOn) return null;
+  const o={};
+  SORT_KEYS.forEach(k=>{
+    const el=document.getElementById('fx_'+k);
+    const v=el?el.value.trim().toLowerCase():'';
+    if(v) o[k]=v;
+  });
+  return Object.keys(o).length?o:null;
+}
+/* 구분 필터 목록을 데이터에 맞춰 유지 (선택값은 보존) */
+function syncGubunFilter(){
+  const el=document.getElementById('fx_gubun'); if(!el) return;
+  const list=gubunList(), sig=list.join('|');
+  if(el.dataset.sig===sig) return;
+  const cur=el.value;
+  el.dataset.sig=sig;
+  el.innerHTML='<option value="">(전체)</option>'
+    +list.map(g=>'<option value="'+esc(g)+'">'+esc(g)+'</option>').join('');
+  el.value = list.indexOf(cur)>=0 ? cur : '';
+}
+
 function renderTabs(){
   const list=gubunList();
   const items=[{k:'전체',n:DATA.length}]
@@ -349,11 +445,21 @@ function gbadge(g){return '<span class="gbadge g'+esc(g)+'">'+esc(g)+'</span>';}
 
 function filtered(){
   const q=document.getElementById('q').value.trim().toLowerCase();
-  return DATA.filter(r=>{
+  const f=colFilters();
+  const list=DATA.filter(r=>{
     if(curCat!=="전체" && r.gubun!==curCat) return false;
-    if(!q) return true;
-    return ((r.name||'')+(r.rep||'')+(r.tel||'')+(r.addr||'')+(r.email||'')+(r.code||'')).toLowerCase().includes(q);
+    if(q && !((r.name||'')+(r.rep||'')+(r.tel||'')+(r.addr||'')+(r.email||'')+(r.code||'')).toLowerCase().includes(q)) return false;
+    if(f){
+      for(const k in f){
+        const raw = (k==='updated_at') ? fmtDate(r.updated_at) : (r[k]||'');
+        const v = String(raw).toLowerCase();
+        if(k==='gubun'){ if(v!==f[k]) return false; }
+        else if(v.indexOf(f[k])<0) return false;
+      }
+    }
+    return true;
   });
+  return sortRows(list);
 }
 
 function render(){
@@ -382,6 +488,8 @@ function render(){
   document.getElementById('showcnt').textContent=list.length;
   document.getElementById('allchk').checked=list.length>0 && list.every(r=>sel.has(r.code));
   renderTabs();
+  updateSortArrows();
+  syncGubunFilter();
   let mx=null; DATA.forEach(r=>{if(r.updated_at&&(!mx||r.updated_at>mx))mx=r.updated_at;});
   document.getElementById('lastupd').textContent=mx?fmtDateTime(mx):'-';
   updateSel();
