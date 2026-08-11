@@ -18,7 +18,7 @@ h1{font-size:20px;color:#404040;margin-bottom:4px;display:inline-block}
 .mode-local{background:#fff3e0;color:#e65100}
 .mode-admin{background:#404040;color:#fff}
 .toprow{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-.tabs{display:flex;gap:6px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
 .tab{padding:10px 22px;border:none;background:#e3e5e8;color:#555;font-size:14px;font-weight:bold;border-radius:8px 8px 0 0;cursor:pointer;transition:.15s}
 .tab.active{background:#404040;color:#fff}
 .datatools{display:flex;gap:6px;flex-wrap:wrap}
@@ -53,7 +53,7 @@ tbody tr.sel{background:#e8f5e9}tbody tr.sel:hover{background:#dcecdd}
 td.upd{color:#999;font-size:11px;font-family:monospace;white-space:nowrap}
 td.upd.fresh{color:#2e7d32;font-weight:bold}
 .acts{white-space:nowrap}
-.gbadge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:bold}
+.gbadge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:bold;background:#eceff1;color:#546e7a}
 .g설치법인{background:#fff3e0;color:#e65100}.g일반점{background:#e3f2fd;color:#1565c0}
 .g직영점{background:#f3e5f5;color:#6a1b9a}.g대행점{background:#e0f2f1;color:#00695c}
 .empty{text-align:center;padding:40px;color:#999;font-size:14px}
@@ -98,10 +98,7 @@ td.upd.fresh{color:#2e7d32;font-weight:bold}
 </div>
 
 <div class="toprow">
-<div class="tabs">
-<button class="tab active" data-cat="설치법인" onclick="setTab('설치법인')">설치법인 <span id="t1"></span></button>
-<button class="tab" data-cat="스토어" onclick="setTab('스토어')">스토어 <span id="t2"></span></button>
-</div>
+<div class="tabs" id="tabs"></div>
 <div class="datatools">
 <button class="btn btn-add adminonly" onclick="openAdd()">＋ 추가</button>
 <button class="btn btn-exp" onclick="exportData()">⬇ 엑셀 내보내기</button>
@@ -152,12 +149,7 @@ td.upd.fresh{color:#2e7d32;font-weight:bold}
 <div class="field"><label>이메일</label><input id="f_email"></div>
 <div class="field"><label>주소</label><input id="f_addr"></div>
 <div class="field"><label>구분 *</label>
-<select id="f_gubun">
-<option value="설치법인">설치법인</option>
-<option value="일반점">일반점 (스토어)</option>
-<option value="직영점">직영점 (스토어)</option>
-<option value="대행점">대행점 (스토어)</option>
-</select></div>
+<select id="f_gubun"></select></div>
 <div class="modal-acts">
 <button class="btn btn-cancel" onclick="closeModal()">취소</button>
 <button class="btn btn-add" id="savebtn" onclick="saveModal()">저장</button>
@@ -208,14 +200,30 @@ if (CLOUD) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const SEED = [];
 
 let DATA = [];
-let curCat = "설치법인";
+let curCat = "전체";
 let editCode = null;
 let isAdmin = false;
 let ready = false;
 const sel = new Set();
 
 /* ---------- 공통 ---------- */
-function catOf(g){return g==="설치법인"?"설치법인":"스토어";}
+/* 엑셀에 흔히 쓰는 구분을 먼저 보여주고, 그 외 값은 뒤에 이름순으로 붙입니다.
+   목록에 없는 구분이 들어와도 탭이 자동으로 생깁니다. */
+const GUBUN_ORDER = ["설치법인","일반점","직영점","대행점"];
+function gubunList(){
+  const seen=[];
+  DATA.forEach(r=>{ if(r.gubun && seen.indexOf(r.gubun)<0) seen.push(r.gubun); });
+  return GUBUN_ORDER.filter(g=>seen.indexOf(g)>=0)
+    .concat(seen.filter(g=>GUBUN_ORDER.indexOf(g)<0).sort());
+}
+function fillGubunSelect(selected){
+  const list=gubunList();
+  const opts=list.length?list:GUBUN_ORDER.slice();
+  if(selected && opts.indexOf(selected)<0) opts.push(selected);
+  const el=document.getElementById('f_gubun');
+  el.innerHTML=opts.map(g=>'<option value="'+esc(g)+'">'+esc(g)+'</option>').join('');
+  el.value = selected && opts.indexOf(selected)>=0 ? selected : opts[0];
+}
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function toast(msg,err){
   const t=document.getElementById('toast');
@@ -326,17 +334,23 @@ async function doLogout(){
 }
 
 /* ---------- 렌더 ---------- */
-function setTab(c){
-  curCat=c;
-  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.cat===c));
-  render();
+function setTab(c){ curCat=c; render(); }
+
+function renderTabs(){
+  const list=gubunList();
+  const items=[{k:'전체',n:DATA.length}]
+    .concat(list.map(g=>({k:g,n:DATA.filter(r=>r.gubun===g).length})));
+  if(items.length>1 && list.indexOf(curCat)<0 && curCat!=='전체') curCat='전체';
+  document.getElementById('tabs').innerHTML=items.map(it=>
+    '<button class="tab'+(it.k===curCat?' active':'')+'" data-cat="'+esc(it.k)+'"'
+    +' onclick="setTab(\''+esc(it.k)+'\')">'+esc(it.k)+' ('+it.n+')</button>').join('');
 }
 function gbadge(g){return '<span class="gbadge g'+esc(g)+'">'+esc(g)+'</span>';}
 
 function filtered(){
   const q=document.getElementById('q').value.trim().toLowerCase();
   return DATA.filter(r=>{
-    if(catOf(r.gubun)!==curCat) return false;
+    if(curCat!=="전체" && r.gubun!==curCat) return false;
     if(!q) return true;
     return ((r.name||'')+(r.rep||'')+(r.tel||'')+(r.addr||'')+(r.email||'')+(r.code||'')).toLowerCase().includes(q);
   });
@@ -367,8 +381,7 @@ function render(){
   document.getElementById('empty').style.display=list.length?'none':'block';
   document.getElementById('showcnt').textContent=list.length;
   document.getElementById('allchk').checked=list.length>0 && list.every(r=>sel.has(r.code));
-  document.getElementById('t1').textContent='('+DATA.filter(r=>catOf(r.gubun)==='설치법인').length+')';
-  document.getElementById('t2').textContent='('+DATA.filter(r=>catOf(r.gubun)==='스토어').length+')';
+  renderTabs();
   let mx=null; DATA.forEach(r=>{if(r.updated_at&&(!mx||r.updated_at>mx))mx=r.updated_at;});
   document.getElementById('lastupd').textContent=mx?fmtDateTime(mx):'-';
   updateSel();
@@ -405,7 +418,7 @@ function openAdd(){
   editCode=null;
   document.getElementById('modalTitle').textContent='센터 추가';
   ['code','name','rep','tel','email','addr'].forEach(k=>document.getElementById('f_'+k).value='');
-  document.getElementById('f_gubun').value = curCat==='설치법인'?'설치법인':'일반점';
+  fillGubunSelect(curCat==='전체'?null:curCat);
   const fc=document.getElementById('f_code'); fc.readOnly=false; fc.style.background='';
   document.getElementById('modal').classList.add('show');
 }
@@ -420,7 +433,7 @@ function openEdit(code){
   document.getElementById('f_tel').value=r.tel||'';
   document.getElementById('f_email').value=r.email||'';
   document.getElementById('f_addr').value=r.addr||'';
-  document.getElementById('f_gubun').value=['설치법인','일반점','직영점','대행점'].includes(r.gubun)?r.gubun:'일반점';
+  fillGubunSelect(r.gubun);
   const fc=document.getElementById('f_code'); fc.readOnly=true; fc.style.background='#f0f0f0';
   document.getElementById('modal').classList.add('show');
 }
@@ -459,8 +472,7 @@ async function saveModal(){
     btn.disabled=false; btn.textContent='저장';
   }
   closeModal();
-  curCat=catOf(gubun);
-  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.cat===curCat));
+  if(curCat!=='전체') curCat=gubun;
   render();
   toast(editCode===null?'추가했습니다':'수정했습니다');
 }
@@ -491,7 +503,7 @@ async function delSelected(){
   // 탭을 넘나들며 선택했을 수 있으므로 구분별 건수를 함께 보여줍니다
   const rows=DATA.filter(r=>sel.has(r.code));
   const byCat={};
-  rows.forEach(r=>{const c=catOf(r.gubun);byCat[c]=(byCat[c]||0)+1;});
+  rows.forEach(r=>{const c=r.gubun||'(구분없음)';byCat[c]=(byCat[c]||0)+1;});
   const catTxt=Object.keys(byCat).map(k=>k+' '+byCat[k]+'건').join(' / ');
   const names=rows.slice(0,7).map(r=>' · '+r.name).join('\n');
   const more=rows.length>7?'\n · … 외 '+(rows.length-7)+'건':'';
