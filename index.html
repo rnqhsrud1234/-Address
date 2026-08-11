@@ -241,7 +241,7 @@ function nowISO(){return new Date().toISOString();}
 /* ---------- 데이터 로드 ---------- */
 async function loadData(){
   if(CLOUD){
-    const {data,error}=await sb.from('contacts').select('*').order('code',{ascending:true});
+    const {data,error}=await sb.from('addressbook').select('*').order('code',{ascending:true});
     if(error){
       toast('데이터를 불러오지 못했습니다 — '+error.message,true);
       DATA=[]; return;
@@ -446,9 +446,10 @@ async function saveModal(){
   btn.disabled=true; btn.textContent='저장 중…';
 
   if(CLOUD){
-    const {error}=await sb.from('contacts').upsert(obj,{onConflict:'code'});
+    const {data,error}=await sb.from('addressbook').upsert(obj,{onConflict:'code'}).select('code');
     btn.disabled=false; btn.textContent='저장';
     if(error){toast('저장하지 못했습니다 — '+error.message,true);return;}
+    if(!(data&&data.length)){toast('저장 권한이 없습니다 (0건 처리) — 다시 로그인해 보세요',true);return;}
     await loadData();
   }else{
     obj.updated_at=nowISO();
@@ -469,8 +470,12 @@ async function delRow(code){
   const r=DATA.find(x=>x.code===code); if(!r)return;
   if(!confirm('['+r.name+'] 항목을 삭제할까요?'))return;
   if(CLOUD){
-    const {error}=await sb.from('contacts').delete().eq('code',code);
+    const {data,error}=await sb.from('addressbook').delete().eq('code',code).select('code');
     if(error){toast('삭제하지 못했습니다 — '+error.message,true);return;}
+    if(!(data&&data.length)){
+      toast('삭제 권한이 없습니다 (0건 처리) — 로그아웃 후 다시 로그인해 보세요',true);
+      await loadData(); render(); return;
+    }
     await loadData();
   }else{
     DATA=DATA.filter(x=>x.code!==code); saveLocal();
@@ -494,8 +499,18 @@ async function delSelected(){
   if(!confirm('선택한 '+codes.length+'건을 삭제합니다.\n('+catTxt+')\n\n'+names+more+'\n\n※ 되돌릴 수 없습니다. 진행할까요?')) return;
 
   if(CLOUD){
-    const {error}=await sb.from('addressbook').delete().in('code',codes);
+    const {data,error}=await sb.from('addressbook').delete().in('code',codes).select('code');
     if(error){toast('삭제하지 못했습니다 — '+error.message,true);return;}
+    const n=(data||[]).length;
+    if(n===0){
+      toast('삭제 권한이 없습니다 (0건 처리) — 로그아웃 후 다시 로그인해 보세요',true);
+      await loadData(); render(); return;
+    }
+    if(n<codes.length){
+      await loadData(); sel.clear(); render();
+      toast(codes.length+'건 중 '+n+'건만 삭제됐습니다',true);
+      return;
+    }
     await loadData();
   }else{
     DATA=DATA.filter(r=>!sel.has(r.code));
@@ -547,10 +562,10 @@ async function importData(input){
 
     if(CLOUD){
       if(!merge){
-        const {error:de}=await sb.from('contacts').delete().neq('code','__never_match__');
+        const {error:de}=await sb.from('addressbook').delete().neq('code','__never_match__');
         if(de){toast('기존 데이터를 지우지 못했습니다 — '+de.message,true);input.value='';return;}
       }
-      const {error}=await sb.from('contacts').upsert(parsed,{onConflict:'code'});
+      const {error}=await sb.from('addressbook').upsert(parsed,{onConflict:'code'});
       if(error){toast('불러오지 못했습니다 — '+error.message,true);input.value='';return;}
       await loadData();
       sel.clear(); render();
