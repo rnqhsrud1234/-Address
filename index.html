@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>쿠쿠 센터 주소록</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;background:#f4f5f7;color:#333;padding:16px}
+.wrap{max-width:1280px;margin:0 auto}
+h1{font-size:20px;color:#404040;margin-bottom:4px;display:inline-block}
+.sub{font-size:12px;color:#888;margin-bottom:16px}
+.sub .updated{color:#404040;font-weight:bold}
+.badge-mode{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;vertical-align:middle}
+.mode-cloud{background:#e8f5e9;color:#2e7d32}
+.mode-local{background:#fff3e0;color:#e65100}
+.mode-admin{background:#404040;color:#fff}
+.toprow{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.tabs{display:flex;gap:6px}
+.tab{padding:10px 22px;border:none;background:#e3e5e8;color:#555;font-size:14px;font-weight:bold;border-radius:8px 8px 0 0;cursor:pointer;transition:.15s}
+.tab.active{background:#404040;color:#fff}
+.datatools{display:flex;gap:6px;flex-wrap:wrap}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#fff;padding:12px;border-radius:8px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.bar input.search{flex:1;min-width:200px;padding:9px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px}
+.bar input.search:focus{outline:none;border-color:#404040}
+.btn{padding:9px 16px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer}
+.btn:focus-visible{outline:2px solid #404040;outline-offset:2px}
+.btn-copy{background:#2e7d32;color:#fff}.btn-copy:hover{background:#256528}
+.btn-clear{background:#ddd;color:#555}.btn-clear:hover{background:#ccc}
+.btn-add{background:#1565c0;color:#fff}.btn-add:hover{background:#0d4a93}
+.btn-exp{background:#6a5acd;color:#fff}.btn-exp:hover{background:#5546b8}
+.btn-imp{background:#e65100;color:#fff}.btn-imp:hover{background:#bf4400}
+.btn-out{background:#e0e0e0;color:#555}.btn-out:hover{background:#ccc}
+.btn-sm{padding:6px 10px;font-size:12px}
+.btn-edit{background:#eef;color:#1565c0}
+.btn-del{background:#fee;color:#c62828}
+.cnt{font-size:13px;color:#666;padding:0 6px}.cnt b{color:#404040}
+.tablewrap{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{background:#EEECE1;color:#333;font-weight:bold;padding:10px 8px;text-align:left;position:sticky;top:0;border-bottom:1px solid #BFBFBF;white-space:nowrap}
+tbody td{padding:8px;border-bottom:1px solid #eee;vertical-align:middle}
+tbody tr:hover{background:#fafaf5}
+tbody tr.sel{background:#e8f5e9}tbody tr.sel:hover{background:#dcecdd}
+.chk{width:36px;text-align:center}.chk input{width:17px;height:17px;cursor:pointer}
+.code{color:#888;font-family:monospace;white-space:nowrap}
+.name{font-weight:bold;color:#404040}
+.email{color:#1565c0;font-family:monospace;font-size:12px}
+.tel{white-space:nowrap;font-family:monospace}
+.addr{color:#555;font-size:12px}
+td.upd{color:#999;font-size:11px;font-family:monospace;white-space:nowrap}
+td.upd.fresh{color:#2e7d32;font-weight:bold}
+.acts{white-space:nowrap}
+.gbadge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:bold}
+.g설치법인{background:#fff3e0;color:#e65100}.g일반점{background:#e3f2fd;color:#1565c0}
+.g직영점{background:#f3e5f5;color:#6a1b9a}.g대행점{background:#e0f2f1;color:#00695c}
+.empty{text-align:center;padding:40px;color:#999;font-size:14px}
+.loading{text-align:center;padding:40px;color:#999;font-size:14px}
+.selbar{display:none;background:#fff;padding:12px;border-radius:8px;margin-top:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.selbar.show{display:block}
+.selbar .info{font-size:13px;color:#666;margin-bottom:8px}
+.selbar .info b{color:#2e7d32}
+.emailout{display:none;width:100%;min-height:70px;padding:10px;border:1px solid #ccc;border-radius:6px;font-family:monospace;font-size:12px;resize:vertical}
+.emailout.show{display:block}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;padding:16px}
+.modal.show{display:flex}
+.modal-box{background:#fff;border-radius:10px;padding:22px;width:100%;max-width:440px;max-height:90vh;overflow:auto}
+.modal-box h2{font-size:17px;color:#404040;margin-bottom:16px}
+.modal-box .hint{font-size:12px;color:#888;margin-bottom:14px;line-height:1.6}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:#666;margin-bottom:4px;font-weight:bold}
+.field input,.field select{width:100%;padding:9px;border:1px solid #ccc;border-radius:6px;font-size:14px}
+.field input:focus,.field select:focus{outline:none;border-color:#404040}
+.modal-acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.btn-cancel{background:#eee;color:#555}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);background:#404040;color:#fff;padding:12px 22px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:.25s;z-index:200;max-width:90vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:#c62828}
+.foot{text-align:center;padding:22px 0 8px;font-size:11px;color:#bbb}
+.foot .dot{cursor:default;color:#e8e8e8;user-select:none;padding:0 6px}
+.setup{background:#fff8e1;border:1px solid #ffe082;color:#8d6e00;padding:12px 14px;border-radius:8px;font-size:12px;line-height:1.7;margin-bottom:12px}
+.setup b{color:#e65100}
+@media(max-width:768px){.col-code,.col-addr,.col-upd{display:none}.bar input.search{min-width:140px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+<h1>쿠쿠 센터 주소록</h1><span class="badge-mode" id="modebadge"></span>
+<div class="sub">최종 수정일 <span class="updated" id="lastupd">-</span> &nbsp;|&nbsp; 이메일 다중 선택 복사 · 검색</div>
+
+<div class="setup" id="setupbox" style="display:none">
+<b>서버 설정이 비어 있습니다.</b> 파일 상단 <code>SUPABASE_URL</code> · <code>SUPABASE_ANON_KEY</code> 값을 확인하세요.
+</div>
+
+<div class="toprow">
+<div class="tabs">
+<button class="tab active" data-cat="설치법인" onclick="setTab('설치법인')">설치법인 <span id="t1"></span></button>
+<button class="tab" data-cat="스토어" onclick="setTab('스토어')">스토어 <span id="t2"></span></button>
+</div>
+<div class="datatools">
+<button class="btn btn-add adminonly" onclick="openAdd()">＋ 추가</button>
+<button class="btn btn-exp" onclick="exportData()">⬇ 엑셀 내보내기</button>
+<button class="btn btn-imp adminonly" onclick="document.getElementById('impfile').click()">⬆ 엑셀 불러오기</button>
+<input type="file" id="impfile" accept=".xlsx,.xls" style="display:none" onchange="importData(this)">
+<button class="btn btn-out" id="logoutbtn" style="display:none" onclick="doLogout()">로그아웃</button>
+</div>
+</div>
+
+<div class="bar">
+<input class="search" id="q" type="text" placeholder="🔍 센터명 · 대표자 · 전화번호 · 주소 · 이메일 검색" oninput="render()">
+<span class="cnt">선택 <b id="selcnt">0</b> / 표시 <b id="showcnt">0</b></span>
+<button class="btn btn-copy" onclick="copyEmails()">📋 선택 이메일 복사</button>
+<button class="btn btn-clear" onclick="clearSel()">선택해제</button>
+</div>
+
+<div class="tablewrap">
+<table>
+<thead><tr>
+<th class="chk"><input type="checkbox" id="allchk" onclick="toggleAll(this)" aria-label="전체 선택"></th>
+<th class="col-code">코드</th><th>센터명</th><th>대표자</th><th>전화번호</th><th>이메일</th><th class="col-addr">주소</th><th>구분</th>
+<th class="col-upd">수정일</th><th class="adminonly">관리</th>
+</tr></thead>
+<tbody id="tbody"></tbody>
+</table>
+<div class="loading" id="loading">불러오는 중…</div>
+<div class="empty" id="empty" style="display:none">검색 결과가 없습니다.</div>
+</div>
+
+<div class="selbar" id="selbar">
+<div class="info">선택된 이메일 <b id="selbarcnt">0</b>개 — 아래 박스에서 복사하거나 버튼을 누르세요</div>
+<button class="btn btn-copy" onclick="copyEmails()">📋 전체 복사</button>
+<textarea class="emailout" id="emailout" readonly onclick="this.select()"></textarea>
+</div>
+
+<div class="foot">쿠쿠홈시스 서비스자재 <span class="dot" id="secretdot" title="">·</span></div>
+</div>
+
+<div class="modal" id="modal">
+<div class="modal-box">
+<h2 id="modalTitle">센터 추가</h2>
+<div class="field"><label>코드 *</label><input id="f_code" placeholder="예: SA61 / S100"></div>
+<div class="field"><label>센터명 *</label><input id="f_name" placeholder="예: 쿠쿠스토어 OO점"></div>
+<div class="field"><label>대표자</label><input id="f_rep"></div>
+<div class="field"><label>전화번호</label><input id="f_tel" placeholder="010-0000-0000"></div>
+<div class="field"><label>이메일</label><input id="f_email"></div>
+<div class="field"><label>주소</label><input id="f_addr"></div>
+<div class="field"><label>구분 *</label>
+<select id="f_gubun">
+<option value="설치법인">설치법인</option>
+<option value="일반점">일반점 (스토어)</option>
+<option value="직영점">직영점 (스토어)</option>
+<option value="대행점">대행점 (스토어)</option>
+</select></div>
+<div class="modal-acts">
+<button class="btn btn-cancel" onclick="closeModal()">취소</button>
+<button class="btn btn-add" id="savebtn" onclick="saveModal()">저장</button>
+</div>
+</div>
+</div>
+
+<div class="modal" id="loginmodal">
+<div class="modal-box">
+<h2>관리자 로그인</h2>
+<div class="hint" id="loginhint"></div>
+<div class="field" id="emailfield"><label>이메일</label><input id="l_email" type="email" autocomplete="username"></div>
+<div class="field"><label>비밀번호</label><input id="l_pw" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+<div class="modal-acts">
+<button class="btn btn-cancel" onclick="closeLogin()">취소</button>
+<button class="btn btn-add" id="loginbtn" onclick="doLogin()">로그인</button>
+</div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   1. 설정 — Supabase 정보를 여기에 입력하세요
+   ============================================================ */
+const SUPABASE_URL      = "https://efxcylnuncyvlassnicg.supabase.co/rest/v1/";   // 예: https://abcdefgh.supabase.co
+const SUPABASE_ANON_KEY = "sb_publishable_o78IiuUyDteuIe1657LktA_ZnrYd_Kx";   // Project Settings > API > anon public key
+
+/* 로컬 모드(=Supabase 미설정) 전용 임시 비밀번호.
+   소스에 그대로 노출되므로 테스트 용도로만 쓰세요. */
+const LOCAL_ADMIN_PW = "cuckoo2026";
+/* ============================================================ */
+
+const CLOUD = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+const LS_KEY = "cuckoo_addrbook_v2";
+const SEED_DATE = "2026-01-01T00:00:00Z";
+
+let sb = null;
+if (CLOUD) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const SEED = [];
+
+let DATA = [];
+let curCat = "설치법인";
+let editCode = null;
+let isAdmin = false;
+let ready = false;
+const sel = new Set();
+
+/* ---------- 공통 ---------- */
+function catOf(g){return g==="설치법인"?"설치법인":"스토어";}
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function toast(msg,err){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show'+(err?' err':'');
+  clearTimeout(t._tm); t._tm=setTimeout(()=>t.className='toast',2600);
+}
+function fmtDate(s){
+  if(!s) return '-';
+  const d=new Date(s); if(isNaN(d)) return '-';
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function fmtDateTime(s){
+  if(!s) return '';
+  const d=new Date(s); if(isNaN(d)) return '';
+  return fmtDate(s)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+function isFresh(s){
+  if(!s) return false;
+  return (Date.now()-new Date(s).getTime()) < 7*24*3600*1000;
+}
+function nowISO(){return new Date().toISOString();}
+
+/* ---------- 데이터 로드 ---------- */
+async function loadData(){
+  if(CLOUD){
+    const {data,error}=await sb.from('addressbook').select('*').order('code',{ascending:true});
+    if(error){
+      toast('데이터를 불러오지 못했습니다 — '+error.message,true);
+      DATA=[]; return;
+    }
+    DATA=data||[];
+  }else{
+    let d=null;
+    try{const s=localStorage.getItem(LS_KEY); if(s) d=JSON.parse(s);}catch(e){}
+    if(!d) d=SEED.map(r=>Object.assign({},r,{updated_at:SEED_DATE}));
+    DATA=d;
+  }
+}
+function saveLocal(){
+  if(CLOUD) return true;
+  try{localStorage.setItem(LS_KEY,JSON.stringify(DATA));return true;}
+  catch(e){toast('브라우저 저장이 차단됐습니다 — 새로고침하면 사라집니다',true);return false;}
+}
+
+/* ---------- 권한 ---------- */
+function applyRole(){
+  document.querySelectorAll('.adminonly').forEach(el=>el.style.display=isAdmin?'':'none');
+  document.getElementById('logoutbtn').style.display=isAdmin?'':'none';
+  const b=document.getElementById('modebadge');
+  if(isAdmin){b.className='badge-mode mode-admin';b.textContent='관리자';}
+  else if(CLOUD){b.className='badge-mode mode-cloud';b.textContent='읽기 전용';}
+  else{b.className='badge-mode mode-local';b.textContent='로컬';}
+}
+
+function openLogin(){
+  document.getElementById('emailfield').style.display=CLOUD?'':'none';
+  document.getElementById('loginhint').textContent = CLOUD
+    ? 'Supabase에 등록된 관리자 계정으로 로그인합니다.'
+    : '로컬 모드입니다. 이 로그인은 화면 잠금일 뿐 실제 보안 기능이 아닙니다.';
+  document.getElementById('l_pw').value='';
+  document.getElementById('loginmodal').classList.add('show');
+  setTimeout(()=>document.getElementById(CLOUD?'l_email':'l_pw').focus(),50);
+}
+function closeLogin(){document.getElementById('loginmodal').classList.remove('show');}
+
+/* 관리자 자격 확인.
+   addrbook_admins 화이트리스트를 설치했으면 그 결과를 따르고,
+   설치하지 않았으면(단순 모드) 로그인만으로 관리자로 봅니다. */
+async function checkAdmin(session){
+  if(!session) return false;
+  try{
+    const {data,error}=await sb.rpc('is_addrbook_admin');
+    if(error) return true;
+    return !!data;
+  }catch(e){ return true; }
+}
+
+async function doLogin(){
+  const pw=document.getElementById('l_pw').value;
+  const btn=document.getElementById('loginbtn');
+  if(CLOUD){
+    const em=document.getElementById('l_email').value.trim();
+    if(!em||!pw){toast('이메일과 비밀번호를 입력하세요',true);return;}
+    btn.disabled=true; btn.textContent='확인 중…';
+    const {error}=await sb.auth.signInWithPassword({email:em,password:pw});
+    btn.disabled=false; btn.textContent='로그인';
+    if(error){toast('로그인 실패 — 이메일 또는 비밀번호를 확인하세요',true);return;}
+    const {data:{session}}=await sb.auth.getSession();
+    if(!await checkAdmin(session)){
+      await sb.auth.signOut();
+      toast('이 계정에는 주소록 수정 권한이 없습니다',true);
+      return;
+    }
+    isAdmin=true;
+  }else{
+    if(pw!==LOCAL_ADMIN_PW){toast('비밀번호가 올바르지 않습니다',true);return;}
+    isAdmin=true;
+  }
+  closeLogin(); applyRole(); render();
+  toast('관리자로 로그인했습니다');
+}
+async function doLogout(){
+  if(CLOUD) await sb.auth.signOut();
+  isAdmin=false; applyRole(); render();
+  toast('로그아웃했습니다');
+}
+
+/* ---------- 렌더 ---------- */
+function setTab(c){
+  curCat=c;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.cat===c));
+  render();
+}
+function gbadge(g){return '<span class="gbadge g'+esc(g)+'">'+esc(g)+'</span>';}
+
+function filtered(){
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  return DATA.filter(r=>{
+    if(catOf(r.gubun)!==curCat) return false;
+    if(!q) return true;
+    return ((r.name||'')+(r.rep||'')+(r.tel||'')+(r.addr||'')+(r.email||'')+(r.code||'')).toLowerCase().includes(q);
+  });
+}
+
+function render(){
+  const list=filtered();
+  document.getElementById('tbody').innerHTML=list.map(r=>{
+    const isSel=sel.has(r.code);
+    const c=esc(r.code);
+    return '<tr class="'+(isSel?'sel':'')+'">'
+      +'<td class="chk"><input type="checkbox" '+(isSel?'checked':'')+' onclick="toggleOne(\''+c+'\')"></td>'
+      +'<td class="code col-code">'+c+'</td>'
+      +'<td class="name">'+esc(r.name)+'</td>'
+      +'<td>'+esc(r.rep)+'</td>'
+      +'<td class="tel">'+(esc(r.tel)||'-')+'</td>'
+      +'<td class="email">'+esc(r.email)+'</td>'
+      +'<td class="addr col-addr">'+esc(r.addr)+'</td>'
+      +'<td>'+gbadge(r.gubun)+'</td>'
+      +'<td class="upd col-upd'+(isFresh(r.updated_at)?' fresh':'')+'" title="'+esc(fmtDateTime(r.updated_at))+'">'+fmtDate(r.updated_at)+'</td>'
+      +(isAdmin
+        ? '<td class="acts adminonly"><button class="btn btn-sm btn-edit" onclick="openEdit(\''+c+'\')">수정</button> '
+          +'<button class="btn btn-sm btn-del" onclick="delRow(\''+c+'\')">삭제</button></td>'
+        : '')
+      +'</tr>';
+  }).join('');
+  document.getElementById('loading').style.display='none';
+  document.getElementById('empty').style.display=list.length?'none':'block';
+  document.getElementById('showcnt').textContent=list.length;
+  document.getElementById('allchk').checked=list.length>0 && list.every(r=>sel.has(r.code));
+  document.getElementById('t1').textContent='('+DATA.filter(r=>catOf(r.gubun)==='설치법인').length+')';
+  document.getElementById('t2').textContent='('+DATA.filter(r=>catOf(r.gubun)==='스토어').length+')';
+  let mx=null; DATA.forEach(r=>{if(r.updated_at&&(!mx||r.updated_at>mx))mx=r.updated_at;});
+  document.getElementById('lastupd').textContent=mx?fmtDateTime(mx):'-';
+  updateSel();
+}
+
+function toggleOne(id){sel.has(id)?sel.delete(id):sel.add(id);render();}
+function toggleAll(cb){filtered().forEach(r=>cb.checked?sel.add(r.code):sel.delete(r.code));render();}
+function clearSel(){sel.clear();render();}
+
+function selEmails(){
+  const seen=new Set(),out=[];
+  DATA.forEach(r=>{if(sel.has(r.code)&&r.email&&!seen.has(r.email)){seen.add(r.email);out.push(r.email);}});
+  return out;
+}
+function updateSel(){
+  const e=selEmails();
+  document.getElementById('selcnt').textContent=sel.size;
+  document.getElementById('selbarcnt').textContent=e.length;
+  const bar=document.getElementById('selbar'),out=document.getElementById('emailout');
+  if(sel.size>0){bar.classList.add('show');out.classList.add('show');out.value=e.join('; ');}
+  else{bar.classList.remove('show');out.classList.remove('show');out.value='';}
+}
+function copyEmails(){
+  const e=selEmails();
+  if(!e.length){toast('선택된 이메일이 없습니다',true);return;}
+  const txt=e.join('; ');
+  navigator.clipboard.writeText(txt).then(()=>toast('이메일 '+e.length+'개를 복사했습니다'))
+  .catch(()=>{const o=document.getElementById('emailout');o.select();document.execCommand('copy');toast('이메일 '+e.length+'개를 복사했습니다');});
+}
+
+/* ---------- 추가 / 수정 / 삭제 (관리자 전용) ---------- */
+function openAdd(){
+  if(!isAdmin)return;
+  editCode=null;
+  document.getElementById('modalTitle').textContent='센터 추가';
+  ['code','name','rep','tel','email','addr'].forEach(k=>document.getElementById('f_'+k).value='');
+  document.getElementById('f_gubun').value = curCat==='설치법인'?'설치법인':'일반점';
+  const fc=document.getElementById('f_code'); fc.readOnly=false; fc.style.background='';
+  document.getElementById('modal').classList.add('show');
+}
+function openEdit(code){
+  if(!isAdmin)return;
+  const r=DATA.find(x=>x.code===code); if(!r)return;
+  editCode=code;
+  document.getElementById('modalTitle').textContent='센터 수정';
+  document.getElementById('f_code').value=r.code;
+  document.getElementById('f_name').value=r.name||'';
+  document.getElementById('f_rep').value=r.rep||'';
+  document.getElementById('f_tel').value=r.tel||'';
+  document.getElementById('f_email').value=r.email||'';
+  document.getElementById('f_addr').value=r.addr||'';
+  document.getElementById('f_gubun').value=['설치법인','일반점','직영점','대행점'].includes(r.gubun)?r.gubun:'일반점';
+  const fc=document.getElementById('f_code'); fc.readOnly=true; fc.style.background='#f0f0f0';
+  document.getElementById('modal').classList.add('show');
+}
+function closeModal(){document.getElementById('modal').classList.remove('show');}
+
+async function saveModal(){
+  if(!isAdmin)return;
+  const code=document.getElementById('f_code').value.trim();
+  const name=document.getElementById('f_name').value.trim();
+  const gubun=document.getElementById('f_gubun').value;
+  if(!code||!name){toast('코드와 센터명은 필수입니다',true);return;}
+  if(editCode===null && DATA.some(x=>x.code===code)){toast('이미 있는 코드입니다',true);return;}
+
+  const obj={
+    code:code, name:name,
+    rep:document.getElementById('f_rep').value.trim(),
+    tel:document.getElementById('f_tel').value.trim(),
+    email:document.getElementById('f_email').value.trim(),
+    addr:document.getElementById('f_addr').value.trim(),
+    gubun:gubun
+  };
+  const btn=document.getElementById('savebtn');
+  btn.disabled=true; btn.textContent='저장 중…';
+
+  if(CLOUD){
+    const {error}=await sb.from('addressbook').upsert(obj,{onConflict:'code'});
+    btn.disabled=false; btn.textContent='저장';
+    if(error){toast('저장하지 못했습니다 — '+error.message,true);return;}
+    await loadData();
+  }else{
+    obj.updated_at=nowISO();
+    if(editCode===null) DATA.push(obj);
+    else DATA[DATA.findIndex(x=>x.code===editCode)]=obj;
+    saveLocal();
+    btn.disabled=false; btn.textContent='저장';
+  }
+  closeModal();
+  curCat=catOf(gubun);
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.cat===curCat));
+  render();
+  toast(editCode===null?'추가했습니다':'수정했습니다');
+}
+
+async function delRow(code){
+  if(!isAdmin)return;
+  const r=DATA.find(x=>x.code===code); if(!r)return;
+  if(!confirm('['+r.name+'] 항목을 삭제할까요?'))return;
+  if(CLOUD){
+    const {error}=await sb.from('addressbook').delete().eq('code',code);
+    if(error){toast('삭제하지 못했습니다 — '+error.message,true);return;}
+    await loadData();
+  }else{
+    DATA=DATA.filter(x=>x.code!==code); saveLocal();
+  }
+  sel.delete(code); render(); toast('삭제했습니다');
+}
+
+/* ---------- 엑셀 내보내기 / 불러오기 ---------- */
+const XLS_HEAD=['코드','센터명','대표자','전화번호','이메일','주소','구분','수정일'];
+function exportData(){
+  const rows=DATA.map(r=>({'코드':r.code,'센터명':r.name,'대표자':r.rep,'전화번호':r.tel,
+    '이메일':r.email,'주소':r.addr,'구분':r.gubun,'수정일':fmtDate(r.updated_at)}));
+  const ws=XLSX.utils.json_to_sheet(rows,{header:XLS_HEAD});
+  ws['!cols']=[{wch:8},{wch:24},{wch:8},{wch:15},{wch:26},{wch:40},{wch:10},{wch:12}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'주소록');
+  const d=new Date(); const ymd=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+  XLSX.writeFile(wb,'쿠쿠주소록_'+ymd+'.xlsx');
+  toast('엑셀로 내보냈습니다 ('+DATA.length+'건)');
+}
+function pick(r,keys){for(const k of keys){if(r[k]!==undefined&&r[k]!==null&&String(r[k]).trim()!=='')return String(r[k]).trim();}return '';}
+
+async function importData(input){
+  if(!isAdmin){input.value='';return;}
+  const file=input.files[0]; if(!file)return;
+  const rd=new FileReader();
+  rd.onload=async function(){
+    let parsed;
+    try{
+      const wb=XLSX.read(rd.result,{type:'array'});
+      const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      parsed=raw.map(r=>({
+        code:pick(r,['코드','code']),
+        name:pick(r,['센터명','name']),
+        rep:pick(r,['대표자','rep']),
+        tel:pick(r,['전화번호','tel']),
+        email:pick(r,['이메일','email']),
+        addr:pick(r,['주소','addr']),
+        gubun:pick(r,['구분','gubun'])||'일반점'
+      })).filter(r=>r.code&&r.name);
+      if(!parsed.length) throw 0;
+    }catch(e){
+      toast('올바른 엑셀 주소록 파일이 아닙니다',true); input.value=''; return;
+    }
+
+    const merge=confirm('불러온 '+parsed.length+'건을 기존 데이터에 [추가·병합]하려면 확인을 누르세요.\n(같은 코드는 갱신, 새 코드는 추가)\n\n※ 취소를 누르면 기존 데이터를 모두 지우고 [전체 교체]합니다.');
+
+    if(CLOUD){
+      if(!merge){
+        const {error:de}=await sb.from('addressbook').delete().neq('code','__never_match__');
+        if(de){toast('기존 데이터를 지우지 못했습니다 — '+de.message,true);input.value='';return;}
+      }
+      const {error}=await sb.from('addressbook').upsert(parsed,{onConflict:'code'});
+      if(error){toast('불러오지 못했습니다 — '+error.message,true);input.value='';return;}
+      await loadData();
+      sel.clear(); render();
+      toast(merge?'병합했습니다 ('+parsed.length+'건 반영)':'전체 교체했습니다 ('+parsed.length+'건)');
+    }else{
+      const ts=nowISO();
+      if(merge){
+        const map=new Map(DATA.map(r=>[r.code,r]));
+        let add=0,upd=0;
+        parsed.forEach(r=>{
+          const rec=Object.assign({},r,{updated_at:ts});
+          if(map.has(r.code)){Object.assign(map.get(r.code),rec);upd++;}
+          else{map.set(r.code,rec);DATA.push(rec);add++;}
+        });
+        saveLocal(); sel.clear(); render();
+        toast('병합했습니다 (추가 '+add+' / 갱신 '+upd+')');
+      }else{
+        DATA=parsed.map(r=>Object.assign({},r,{updated_at:ts}));
+        saveLocal(); sel.clear(); render();
+        toast('전체 교체했습니다 ('+DATA.length+'건)');
+      }
+    }
+    input.value='';
+  };
+  rd.readAsArrayBuffer(file);
+}
+
+/* ---------- 숨은 관리자 진입 ---------- */
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey&&e.shiftKey&&(e.key==='A'||e.key==='a')){e.preventDefault();if(!isAdmin)openLogin();}
+  if(e.key==='Escape'){closeModal();closeLogin();}
+});
+(function(){
+  let n=0,tm=null;
+  document.getElementById('secretdot').addEventListener('click',function(){
+    n++; clearTimeout(tm); tm=setTimeout(()=>n=0,1200);
+    if(n>=3){n=0; if(!isAdmin) openLogin();}
+  });
+})();
+document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+document.getElementById('loginmodal').addEventListener('click',function(e){if(e.target===this)closeLogin();});
+
+/* ---------- 시작 ---------- */
+(async function init(){
+  if(!CLOUD) document.getElementById('setupbox').style.display='';
+  if(CLOUD){
+    const {data:{session}}=await sb.auth.getSession();
+    isAdmin=await checkAdmin(session);
+    sb.auth.onAuthStateChange(async (_e,s)=>{
+      isAdmin=await checkAdmin(s);
+      applyRole(); if(ready) render();
+    });
+  }
+  applyRole();
+  await loadData();
+  ready=true;
+  render();
+  if(location.hash==='#admin'&&!isAdmin) openLogin();
+})();
+</script>
+</body>
+</html>
