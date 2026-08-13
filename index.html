@@ -655,6 +655,34 @@ function exportData(){
 }
 function pick(r,keys){for(const k of keys){if(r[k]!==undefined&&r[k]!==null&&String(r[k]).trim()!=='')return String(r[k]).trim();}return '';}
 
+/* 엑셀의 수정일 칸을 ISO 문자열로. 문자열/날짜/엑셀일련번호 모두 처리.
+   비었거나 해석 불가면 null (=날짜 정보 없음). */
+function parseDateCell(v){
+  if(v===undefined||v===null||v==='') return null;
+  if(v instanceof Date && !isNaN(v)) return v.toISOString();
+  if(typeof v==='number' && isFinite(v)){            // 엑셀 일련번호
+    const ms=Math.round((v-25569)*86400*1000);
+    const d=new Date(ms);
+    return isNaN(d)?null:d.toISOString();
+  }
+  const t=String(v).trim();
+  if(!t) return null;
+  const m=t.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
+  if(m){
+    const d=new Date(Number(m[1]),Number(m[2])-1,Number(m[3]),12,0,0);
+    return isNaN(d)?null:d.toISOString();
+  }
+  const d=new Date(t);
+  return isNaN(d)?null:d.toISOString();
+}
+
+/* 내용 비교용 필드 (수정일은 제외 — 내용이 같으면 날짜를 건드리지 않기 위함) */
+const CMP_FIELDS=['name','rep','tel','email','addr','gubun'];
+function sameRow(a,b){
+  if(!a||!b) return false;
+  return CMP_FIELDS.every(k=>String(a[k]||'').trim()===String(b[k]||'').trim());
+}
+
 async function importData(input){
   if(!isAdmin){input.value='';return;}
   const file=input.files[0]; if(!file)return;
@@ -663,7 +691,7 @@ async function importData(input){
     let parsed;
     try{
       const wb=XLSX.read(rd.result,{type:'array'});
-      const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',cellDates:true});
       parsed=raw.map(r=>({
         code:pick(r,['코드','code']),
         name:pick(r,['센터명','name']),
@@ -671,7 +699,8 @@ async function importData(input){
         tel:pick(r,['전화번호','tel']),
         email:pick(r,['이메일','email']),
         addr:pick(r,['주소','addr']),
-        gubun:pick(r,['구분','gubun'])||'일반점'
+        gubun:pick(r,['구분','gubun'])||'일반점',
+        _xlsDate:parseDateCell(r['수정일']!==undefined?r['수정일']:r['updated_at'])
       })).filter(r=>r.code&&r.name);
       if(!parsed.length) throw 0;
     }catch(e){
@@ -680,30 +709,65 @@ async function importData(input){
 
     const merge=confirm('불러온 '+parsed.length+'건을 기존 데이터에 [추가·병합]하려면 확인을 누르세요.\n(같은 코드는 갱신, 새 코드는 추가)\n\n※ 취소를 누르면 기존 데이터를 모두 지우고 [전체 교체]합니다.');
 
+    const strip=r=>({code:r.code,name:r.name,rep:r.rep,tel:r.tel,email:r.email,addr:r.addr,gubun:r.gubun});
+
     if(CLOUD){
       if(!merge){
+        // 전체 교체: 지우고 새로 넣습니다. INSERT라 엑셀의 수정일이 그대로 보존됩니다.
         const {error:de}=await sb.from('addressbook').delete().neq('code','__never_match__');
         if(de){toast('기존 데이터를 지우지 못했습니다 — '+de.message,true);input.value='';return;}
+        const payload=parsed.map(r=>{
+          const o=strip(r);
+          if(r._xlsDate) o.updated_at=r._xlsDate;
+          return o;
+        });
+        const {error}=await sb.from('addressbook').upsert(payload,{onConflict:'code'});
+        if(error){toast('불러오지 못했습니다 — '+error.message,true);input.value='';return;}
+        await loadData(); sel.clear(); render();
+        toast('전체 교체했습니다 ('+parsed.length+'건)');
+      }else{
+        // 병합: 내용이 실제로 달라진 행과 새 행만 보냅니다.
+        const cur=new Map(DATA.map(r=>[r.code,r]));
+        const payload=[]; let add=0,upd=0,skip=0;
+        parsed.forEach(r=>{
+          const old=cur.get(r.code);
+          if(old){
+            if(sameRow(old,r)){skip++;return;}   // 값이 같으면 건드리지 않음 -> 수정일 유지
+            payload.push(strip(r)); upd++;
+          }else{
+            const o=strip(r);
+            if(r._xlsDate) o.updated_at=r._xlsDate;
+            payload.push(o); add++;
+          }
+        });
+        if(payload.length){
+          const {data,error}=await sb.from('addressbook').upsert(payload,{onConflict:'code'}).select('code');
+          if(error){toast('불러오지 못했습니다 — '+error.message,true);input.value='';return;}
+          if(!(data&&data.length)){toast('저장 권한이 없습니다 (0건 처리) — 다시 로그인해 보세요',true);input.value='';return;}
+        }
+        await loadData(); sel.clear(); render();
+        toast('병합 완료 — 추가 '+add+' / 변경 '+upd+' / 동일 '+skip+'건');
       }
-      const {error}=await sb.from('addressbook').upsert(parsed,{onConflict:'code'});
-      if(error){toast('불러오지 못했습니다 — '+error.message,true);input.value='';return;}
-      await loadData();
-      sel.clear(); render();
-      toast(merge?'병합했습니다 ('+parsed.length+'건 반영)':'전체 교체했습니다 ('+parsed.length+'건)');
     }else{
       const ts=nowISO();
       if(merge){
         const map=new Map(DATA.map(r=>[r.code,r]));
-        let add=0,upd=0;
+        let add=0,upd=0,skip=0;
         parsed.forEach(r=>{
-          const rec=Object.assign({},r,{updated_at:ts});
-          if(map.has(r.code)){Object.assign(map.get(r.code),rec);upd++;}
-          else{map.set(r.code,rec);DATA.push(rec);add++;}
+          const old=map.get(r.code);
+          if(old){
+            if(sameRow(old,r)){skip++;return;}          // 값 동일 -> 수정일 유지
+            Object.assign(old,strip(r),{updated_at:ts});
+            upd++;
+          }else{
+            const rec=Object.assign(strip(r),{updated_at:r._xlsDate||ts});
+            map.set(r.code,rec); DATA.push(rec); add++;
+          }
         });
         saveLocal(); sel.clear(); render();
-        toast('병합했습니다 (추가 '+add+' / 갱신 '+upd+')');
+        toast('병합 완료 — 추가 '+add+' / 변경 '+upd+' / 동일 '+skip+'건');
       }else{
-        DATA=parsed.map(r=>Object.assign({},r,{updated_at:ts}));
+        DATA=parsed.map(r=>Object.assign(strip(r),{updated_at:r._xlsDate||ts}));
         saveLocal(); sel.clear(); render();
         toast('전체 교체했습니다 ('+DATA.length+'건)');
       }
