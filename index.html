@@ -95,7 +95,7 @@ td.upd.fresh{color:#2e7d32;font-weight:bold}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" onerror="window.__sbFail=1"></script>
 </head>
 <body>
 <div class="wrap">
@@ -157,6 +157,10 @@ td.upd.fresh{color:#2e7d32;font-weight:bold}
 <tbody id="tbody"></tbody>
 </table>
 <div class="loading" id="loading">불러오는 중…</div>
+<div class="empty" id="loadfail" style="display:none">
+<div id="failmsg" style="margin-bottom:14px;line-height:1.7"></div>
+<button class="btn btn-add" onclick="retryLoad()">다시 시도</button>
+</div>
 <div class="empty" id="empty" style="display:none">검색 결과가 없습니다.</div>
 </div>
 
@@ -222,11 +226,12 @@ const LOCAL_ADMIN_PW = "cuckoo2026";
 /* ============================================================ */
 
 const CLOUD = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+const LIB_OK = !!(window.supabase && window.supabase.createClient) && !window.__sbFail;
 const LS_KEY = "cuckoo_addrbook_v2";
 const SEED_DATE = "2026-01-01T00:00:00Z";
 
 let sb = null;
-if (CLOUD) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+if (CLOUD && LIB_OK) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const SEED = [];
 
@@ -281,14 +286,30 @@ function isFresh(s){
 function nowISO(){return new Date().toISOString();}
 
 /* ---------- 데이터 로드 ---------- */
+let loadErr=null;   // 마지막 실패 사유 (null이면 정상)
+
+function withTimeout(p,ms){
+  return Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('__timeout__')),ms))]);
+}
+
 async function loadData(){
+  loadErr=null;
   if(CLOUD){
-    const {data,error}=await sb.from('addressbook').select('*').order('code',{ascending:true});
-    if(error){
-      toast('데이터를 불러오지 못했습니다 — '+error.message,true);
-      DATA=[]; return;
+    if(!LIB_OK){ loadErr='lib'; DATA=[]; return; }
+    // 최대 3회 시도 (절전 해제 대기용으로 점점 길게)
+    const waits=[8000,12000,20000];
+    for(let i=0;i<waits.length;i++){
+      try{
+        const {data,error}=await withTimeout(
+          sb.from('addressbook').select('*').order('code',{ascending:true}), waits[i]);
+        if(error) throw new Error(error.message);
+        DATA=data||[]; loadErr=null; return;
+      }catch(e){
+        loadErr=(e&&e.message==='__timeout__')?'timeout':((e&&e.message)||'unknown');
+        if(i<waits.length-1) await new Promise(r=>setTimeout(r,1500));
+      }
     }
-    DATA=data||[];
+    DATA=[]; return;
   }else{
     let d=null;
     try{const s=localStorage.getItem(LS_KEY); if(s) d=JSON.parse(s);}catch(e){}
@@ -399,6 +420,16 @@ function sortRows(list){
   });
 }
 
+async function retryLoad(){
+  document.getElementById('loadfail').style.display='none';
+  const ld=document.getElementById('loading');
+  ld.style.display='block'; ld.textContent='다시 불러오는 중…';
+  await loadData();
+  ld.textContent='불러오는 중…';
+  render();
+  if(!loadErr) toast('불러왔습니다 ('+DATA.length+'건)');
+}
+
 function toggleFilter(){
   filterOn=!filterOn;
   document.getElementById('filterrow').style.display = filterOn?'':'none';
@@ -484,7 +515,23 @@ function render(){
       +'</tr>';
   }).join('');
   document.getElementById('loading').style.display='none';
-  document.getElementById('empty').style.display=list.length?'none':'block';
+  const failBox=document.getElementById('loadfail');
+  if(loadErr && DATA.length===0){
+    let m;
+    if(loadErr==='lib'){
+      m='필요한 스크립트를 불러오지 못했습니다.<br>회사 네트워크나 브라우저 확장이 <b>cdn.jsdelivr.net</b> 접속을 막고 있을 수 있습니다.';
+    }else if(loadErr==='timeout'){
+      m='서버 응답이 없습니다.<br>데이터베이스가 절전 상태일 수 있습니다. 잠시 후 다시 시도해 주세요.<br><span style="font-size:12px">계속 반복되면 Supabase에서 프로젝트 복구가 필요합니다.</span>';
+    }else{
+      m='데이터를 불러오지 못했습니다.<br><span style="font-size:11px;color:#aaa">'+esc(loadErr)+'</span>';
+    }
+    document.getElementById('failmsg').innerHTML=m;
+    failBox.style.display='block';
+    document.getElementById('empty').style.display='none';
+  }else{
+    failBox.style.display='none';
+    document.getElementById('empty').style.display=list.length?'none':'block';
+  }
   document.getElementById('showcnt').textContent=list.length;
   document.getElementById('allchk').checked=list.length>0 && list.every(r=>sel.has(r.code));
   renderTabs();
@@ -795,7 +842,7 @@ document.getElementById('loginmodal').addEventListener('click',function(e){if(e.
 /* ---------- 시작 ---------- */
 (async function init(){
   if(!CLOUD) document.getElementById('setupbox').style.display='';
-  if(CLOUD){
+  if(CLOUD && LIB_OK){
     const {data:{session}}=await sb.auth.getSession();
     isAdmin=await checkAdmin(session);
     sb.auth.onAuthStateChange(async (_e,s)=>{
