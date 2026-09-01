@@ -292,6 +292,29 @@ function withTimeout(p,ms){
   return Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('__timeout__')),ms))]);
 }
 
+/* 쓰기 작업 공통 실행기.
+   응답이 없으면 25초 뒤 포기하고 이유를 알려줍니다(무한 대기 방지). */
+/* 세션 관련: 응답이 없어도 화면이 멈추지 않게 짧게 끊고 넘어갑니다 */
+async function safeSession(){
+  try{ const r=await withTimeout(sb.auth.getSession(),10000); return (r&&r.data&&r.data.session)||null; }
+  catch(e){ return null; }
+}
+async function safeSignOut(){
+  try{ await withTimeout(sb.auth.signOut(),10000); }catch(e){}
+}
+
+async function runWrite(promise){
+  try{
+    const res=await withTimeout(promise,25000);
+    if(res && res.error) return {ok:false,msg:res.error.message};
+    return {ok:true,data:(res&&res.data)||[]};
+  }catch(e){
+    if(e&&e.message==='__timeout__')
+      return {ok:false,msg:'서버 응답이 없습니다. 데이터베이스가 절전 상태일 수 있으니 잠시 후 다시 시도해 주세요',timeout:true};
+    return {ok:false,msg:(e&&e.message)||'알 수 없는 오류'};
+  }
+}
+
 async function loadData(){
   loadErr=null;
   if(CLOUD){
@@ -365,12 +388,19 @@ async function doLogin(){
     // "admin" -> "admin@cuckoo.local" (이미 @가 있으면 그대로 사용)
     const em = raw.includes('@') ? raw : raw + '@' + ADMIN_ID_DOMAIN;
     btn.disabled=true; btn.textContent='확인 중…';
-    const {data,error}=await sb.auth.signInWithPassword({email:em,password:pw});
+    let data=null,error=null;
+    try{
+      const r=await withTimeout(sb.auth.signInWithPassword({email:em,password:pw}),25000);
+      data=r.data; error=r.error;
+    }catch(e){
+      btn.disabled=false; btn.textContent='로그인';
+      toast('서버 응답이 없습니다. 잠시 후 다시 시도해 주세요',true); return;
+    }
     btn.disabled=false; btn.textContent='로그인';
     if(error){toast('로그인 실패 — 아이디 또는 비밀번호를 확인하세요',true);return;}
-    const session=(data && data.session) || (await sb.auth.getSession()).data.session;
+    const session=(data && data.session) || (await safeSession());
     if(!await checkAdmin(session)){
-      await sb.auth.signOut();
+      await safeSignOut();
       toast('이 계정에는 주소록 수정 권한이 없습니다',true);
       return;
     }
@@ -383,7 +413,7 @@ async function doLogin(){
   toast('관리자로 로그인했습니다');
 }
 async function doLogout(){
-  if(CLOUD) await sb.auth.signOut();
+  if(CLOUD) await safeSignOut();
   isAdmin=false; applyRole(); render();
   toast('로그아웃했습니다');
 }
@@ -614,10 +644,10 @@ async function saveModal(){
   btn.disabled=true; btn.textContent='저장 중…';
 
   if(CLOUD){
-    const {data,error}=await sb.from('addressbook').upsert(obj,{onConflict:'code'}).select('code');
+    const r=await runWrite(sb.from('addressbook').upsert(obj,{onConflict:'code'}).select('code'));
     btn.disabled=false; btn.textContent='저장';
-    if(error){toast('저장하지 못했습니다 — '+error.message,true);return;}
-    if(!(data&&data.length)){toast('저장 권한이 없습니다 (0건 처리) — 다시 로그인해 보세요',true);return;}
+    if(!r.ok){toast('저장하지 못했습니다 — '+r.msg,true);return;}
+    if(!r.data.length){toast('저장 권한이 없습니다 (0건 처리) — 다시 로그인해 보세요',true);return;}
     await loadData();
   }else{
     obj.updated_at=nowISO();
@@ -637,9 +667,9 @@ async function delRow(code){
   const r=DATA.find(x=>x.code===code); if(!r)return;
   if(!confirm('['+r.name+'] 항목을 삭제할까요?'))return;
   if(CLOUD){
-    const {data,error}=await sb.from('addressbook').delete().eq('code',code).select('code');
-    if(error){toast('삭제하지 못했습니다 — '+error.message,true);return;}
-    if(!(data&&data.length)){
+    const r=await runWrite(sb.from('addressbook').delete().eq('code',code).select('code'));
+    if(!r.ok){toast('삭제하지 못했습니다 — '+r.msg,true);return;}
+    if(!r.data.length){
       toast('삭제 권한이 없습니다 (0건 처리) — 로그아웃 후 다시 로그인해 보세요',true);
       await loadData(); render(); return;
     }
@@ -666,9 +696,9 @@ async function delSelected(){
   if(!confirm('선택한 '+codes.length+'건을 삭제합니다.\n('+catTxt+')\n\n'+names+more+'\n\n※ 되돌릴 수 없습니다. 진행할까요?')) return;
 
   if(CLOUD){
-    const {data,error}=await sb.from('addressbook').delete().in('code',codes).select('code');
-    if(error){toast('삭제하지 못했습니다 — '+error.message,true);return;}
-    const n=(data||[]).length;
+    const r=await runWrite(sb.from('addressbook').delete().in('code',codes).select('code'));
+    if(!r.ok){toast('삭제하지 못했습니다 — '+r.msg,true);return;}
+    const n=r.data.length;
     if(n===0){
       toast('삭제 권한이 없습니다 (0건 처리) — 로그아웃 후 다시 로그인해 보세요',true);
       await loadData(); render(); return;
@@ -761,15 +791,15 @@ async function importData(input){
     if(CLOUD){
       if(!merge){
         // 전체 교체: 지우고 새로 넣습니다. INSERT라 엑셀의 수정일이 그대로 보존됩니다.
-        const {error:de}=await sb.from('addressbook').delete().neq('code','__never_match__');
-        if(de){toast('기존 데이터를 지우지 못했습니다 — '+de.message,true);input.value='';return;}
+        const rd0=await runWrite(sb.from('addressbook').delete().neq('code','__never_match__'));
+        if(!rd0.ok){toast('기존 데이터를 지우지 못했습니다 — '+rd0.msg,true);input.value='';return;}
         const payload=parsed.map(r=>{
           const o=strip(r);
           if(r._xlsDate) o.updated_at=r._xlsDate;
           return o;
         });
-        const {error}=await sb.from('addressbook').upsert(payload,{onConflict:'code'});
-        if(error){toast('불러오지 못했습니다 — '+error.message,true);input.value='';return;}
+        const ru=await runWrite(sb.from('addressbook').upsert(payload,{onConflict:'code'}));
+        if(!ru.ok){toast('불러오지 못했습니다 — '+ru.msg,true);input.value='';return;}
         await loadData(); sel.clear(); render();
         toast('전체 교체했습니다 ('+parsed.length+'건)');
       }else{
@@ -788,9 +818,9 @@ async function importData(input){
           }
         });
         if(payload.length){
-          const {data,error}=await sb.from('addressbook').upsert(payload,{onConflict:'code'}).select('code');
-          if(error){toast('불러오지 못했습니다 — '+error.message,true);input.value='';return;}
-          if(!(data&&data.length)){toast('저장 권한이 없습니다 (0건 처리) — 다시 로그인해 보세요',true);input.value='';return;}
+          const rm=await runWrite(sb.from('addressbook').upsert(payload,{onConflict:'code'}).select('code'));
+          if(!rm.ok){toast('불러오지 못했습니다 — '+rm.msg,true);input.value='';return;}
+          if(!rm.data.length){toast('저장 권한이 없습니다 (0건 처리) — 다시 로그인해 보세요',true);input.value='';return;}
         }
         await loadData(); sel.clear(); render();
         toast('병합 완료 — 추가 '+add+' / 변경 '+upd+' / 동일 '+skip+'건');
@@ -843,7 +873,7 @@ document.getElementById('loginmodal').addEventListener('click',function(e){if(e.
 (async function init(){
   if(!CLOUD) document.getElementById('setupbox').style.display='';
   if(CLOUD && LIB_OK){
-    const {data:{session}}=await sb.auth.getSession();
+    const session=await safeSession();
     isAdmin=await checkAdmin(session);
     sb.auth.onAuthStateChange(async (_e,s)=>{
       isAdmin=await checkAdmin(s);
